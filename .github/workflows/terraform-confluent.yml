@@ -31,7 +31,7 @@ jobs:
   terraform:
     name: Terraform ${{ github.event.inputs.action || (github.event_name == 'push' && 'apply') || 'plan' }}
     runs-on: ubuntu-latest
-    environment: ${{ (github.event.inputs.action == 'apply' || github.event_name == 'push') && 'production' || '' }}
+    environment: terraform-confluent
 
     defaults:
       run:
