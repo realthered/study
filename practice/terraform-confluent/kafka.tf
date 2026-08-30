@@ -11,13 +11,14 @@ resource "confluent_kafka_cluster" "main" {
   environment {
     id = confluent_environment.main.id
   }
-
-  network {
-    id = confluent_network.main.id
-  }
 }
 
 # --- Service Accounts ---
+
+resource "confluent_service_account" "admin" {
+  display_name = "${local.cluster_name}-admin"
+  description  = "Cluster admin service account for managing topics and ACLs"
+}
 
 resource "confluent_service_account" "producer" {
   display_name = "${local.cluster_name}-producer"
@@ -29,7 +30,38 @@ resource "confluent_service_account" "consumer" {
   description  = "Service account for Kafka consumers"
 }
 
+# --- Role Bindings ---
+
+resource "confluent_role_binding" "admin_cluster_admin" {
+  principal   = "User:${confluent_service_account.admin.id}"
+  role_name   = "CloudClusterAdmin"
+  crn_pattern = confluent_kafka_cluster.main.rbac_crn
+}
+
 # --- API Keys ---
+
+resource "confluent_api_key" "admin_kafka" {
+  display_name = "${local.cluster_name}-admin-kafka-api-key"
+  description  = "Kafka API key for cluster admin service account"
+
+  owner {
+    id          = confluent_service_account.admin.id
+    api_version = confluent_service_account.admin.api_version
+    kind        = confluent_service_account.admin.kind
+  }
+
+  managed_resource {
+    id          = confluent_kafka_cluster.main.id
+    api_version = confluent_kafka_cluster.main.api_version
+    kind        = confluent_kafka_cluster.main.kind
+
+    environment {
+      id = confluent_environment.main.id
+    }
+  }
+
+  depends_on = [confluent_role_binding.admin_cluster_admin]
+}
 
 resource "confluent_api_key" "producer_kafka" {
   display_name = "${local.cluster_name}-producer-kafka-api-key"
@@ -88,8 +120,8 @@ resource "confluent_kafka_topic" "topics" {
   }
 
   credentials {
-    key    = confluent_api_key.producer_kafka.id
-    secret = confluent_api_key.producer_kafka.secret
+    key    = confluent_api_key.admin_kafka.id
+    secret = confluent_api_key.admin_kafka.secret
   }
 
   config = {
@@ -117,8 +149,8 @@ resource "confluent_kafka_acl" "producer_write" {
   rest_endpoint = confluent_kafka_cluster.main.rest_endpoint
 
   credentials {
-    key    = confluent_api_key.producer_kafka.id
-    secret = confluent_api_key.producer_kafka.secret
+    key    = confluent_api_key.admin_kafka.id
+    secret = confluent_api_key.admin_kafka.secret
   }
 }
 
@@ -141,8 +173,8 @@ resource "confluent_kafka_acl" "consumer_read" {
   rest_endpoint = confluent_kafka_cluster.main.rest_endpoint
 
   credentials {
-    key    = confluent_api_key.producer_kafka.id
-    secret = confluent_api_key.producer_kafka.secret
+    key    = confluent_api_key.admin_kafka.id
+    secret = confluent_api_key.admin_kafka.secret
   }
 }
 
@@ -161,7 +193,7 @@ resource "confluent_kafka_acl" "consumer_group" {
   rest_endpoint = confluent_kafka_cluster.main.rest_endpoint
 
   credentials {
-    key    = confluent_api_key.producer_kafka.id
-    secret = confluent_api_key.producer_kafka.secret
+    key    = confluent_api_key.admin_kafka.id
+    secret = confluent_api_key.admin_kafka.secret
   }
 }
